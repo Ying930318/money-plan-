@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Money Plan+ Ultimate Cloud</title>
+    <style>
+        :root { --primary: #1a73e8; --success: #34a853; --danger: #ea4335; --warning: #fbbc04; --bg: #f8f9fa; }
+        body { font-family: 'PingFang TC', sans-serif; background: var(--bg); margin: 0; padding-bottom: 80px; }
+        .page { display: none; padding: 20px; animation: fadeIn 0.2s; }
+        .page.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .card { background: white; padding: 18px; border-radius: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 15px; }
+        h1 { font-size: 22px; color: var(--primary); margin-bottom: 15px; }
+        h2 { font-size: 16px; margin: 0 0 10px 0; border-left: 4px solid var(--primary); padding-left: 10px; }
+        .nav-bar { position: fixed; bottom: 0; width: 100%; background: white; display: flex; box-shadow: 0 -2px 10px rgba(0,0,0,0.05); z-index: 100; }
+        .nav-item { flex: 1; text-align: center; padding: 10px 0; font-size: 12px; color: #666; cursor: pointer; }
+        .nav-item.active { color: var(--primary); font-weight: bold; }
+        input, select, button { width: 100%; padding: 12px; margin: 5px 0 10px 0; border: 1px solid #ddd; border-radius: 10px; font-size: 15px; box-sizing: border-box; }
+        button { background: var(--primary); color: white; border: none; font-weight: bold; cursor: pointer; }
+        .btn-danger { background: var(--danger); }
+        .btn-sm { padding: 6px; font-size: 12px; background: #e8f0fe; color: var(--primary); border: 1px solid var(--primary); border-radius: 8px; cursor: pointer; }
+        .budget-row { margin-bottom: 12px; }
+        .budget-label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+        .progress-bg { height: 8px; background: #eee; border-radius: 4px; overflow: hidden; }
+        .progress-fill { height: 100%; transition: width 0.5s; }
+        .debt-banner { background: #e8f0fe; padding: 12px; border-radius: 12px; text-align: center; color: var(--primary); font-weight: bold; margin-bottom: 15px; }
+        .log-item { padding: 12px; border-bottom: 1px solid #eee; font-size: 14px; display: flex; justify-content: space-between; align-items: flex-start; flex-direction: column; }
+        .log-actions { margin-top: 8px; display: flex; gap: 10px; width: 100%; justify-content: flex-end; }
+        #sync-status { font-size: 10px; color: #999; text-align: center; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+    <div id="page-home" class="page active">
+        <div id="sync-status">雲端同步中...</div>
+        <h1>🏠 概覽</h1>
+        <div class="debt-banner" id="home-debt">✨ 計算中...</div>
+        <div class="card">
+            <h2>📊 預算進度</h2>
+            <div id="home-budgets"></div>
+        </div>
+        <div class="card">
+            <h2>📜 最近紀錄</h2>
+            <div id="home-logs"></div>
+        </div>
+    </div>
+
+    <div id="page-expense" class="page">
+        <h1>💸 支出記帳</h1>
+        <div class="card">
+            <input type="text" id="exp-item" placeholder="買了什麼？">
+            <input type="number" id="exp-total" placeholder="總金額" oninput="autoSplit()">
+            <select id="exp-cat"></select>
+            <label>💰 誰現場付錢？</label>
+            <div style="display:flex; gap:5px; margin-bottom:10px;">
+                <button class="btn-sm" onclick="quickPay('83')">83全付</button>
+                <button class="btn-sm" onclick="quickPay('jy')">捷媖全付</button>
+            </div>
+            <div style="display:flex; gap:10px">
+                <input type="number" id="p-83" placeholder="83付">
+                <input type="number" id="p-jy" placeholder="捷媖付">
+            </div>
+            <label>🤝 誰該負擔？</label>
+            <div style="display:flex; gap:5px; margin-bottom:10px;"><button class="btn-sm" onclick="autoSplit()">兩人平分</button></div>
+            <div style="display:flex; gap:10px">
+                <input type="number" id="o-83" placeholder="83擔">
+                <input type="number" id="o-jy" placeholder="捷媖擔">
+            </div>
+            <button onclick="saveExpense()">確認存檔</button>
+        </div>
+    </div>
+
+    <div id="page-income" class="page">
+        <h1>💰 新增收入</h1>
+        <div class="card">
+            <input type="text" id="inc-item" placeholder="薪水/獎金項目">
+            <input type="number" id="inc-amt" placeholder="金額">
+            <select id="inc-cat"></select>
+            <button onclick="saveIncome()" style="background:var(--success)">確認入帳</button>
+        </div>
+    </div>
+
+    <div id="page-manage" class="page">
+        <h1>⚙️ 管理預算</h1>
+        <div class="card">
+            <h2>🆕 新增/編輯分類</h2>
+            <input type="text" id="m-name" placeholder="分類名稱">
+            <input type="number" id="m-amt" placeholder="每月目標預算">
+            <button onclick="saveCategory()">儲存分類</button>
+        </div>
+        <div id="manage-list"></div>
+        <button class="btn-danger" onclick="resetData()" style="margin-top:20px">⚠️ 清除所有舊資料並修復</button>
+    </div>
+
+    <div class="nav-bar">
+        <div class="nav-item active" onclick="showPage('home')">🏠首頁</div>
+        <div class="nav-item" onclick="showPage('expense')">💸支出</div>
+        <div class="nav-item" onclick="showPage('income')">💰收入</div>
+        <div class="nav-item" onclick="showPage('manage')">⚙️管理</div>
+    </div>
+
+    <script>
+        // --- 1. 設定與初始化 ---
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzoqvaeVa8uM0IFwiSwNJJfioFYsnQ5ArELO8GHiIyPyDwMA9edNGTUF508KSXfMNu9gw/exec";
+
+        let state = {
+            budgets: { "餐費": { total: 10000, remain: 10000 }, "貸款": { total: 15000, remain: 15000 } },
+            netDebt: 0,
+            logs: []
+        };
+
+        // 從本地讀取緩存
+        const rawData = localStorage.getItem('moneyPlanData');
+        if (rawData) {
+            try {
+                let parsed = JSON.parse(rawData);
+                state.logs = (parsed.logs || []).filter(l => typeof l === 'object' && l !== null && l.txt);
+                state.budgets = parsed.budgets || state.budgets;
+                state.netDebt = parsed.netDebt || 0;
+            } catch(e) { console.error("本地資料損壞"); }
+        }
+
+        // --- 2. 雲端同步邏輯 ---
+        async function syncToCloud() {
+            document.getElementById('sync-status').innerText = "☁️ 正在同步至雲端...";
+            try {
+                await fetch(WEB_APP_URL, {
+                    method: "POST",
+                    mode: 'no-cors', // 解決跨域問題
+                    body: JSON.stringify({ action: "save", state: state })
+                });
+                document.getElementById('sync-status').innerText = "✅ 雲端已同步";
+            } catch (e) {
+                document.getElementById('sync-status').innerText = "❌ 同步失敗 (離線模式)";
+            }
+        }
+
+        async function loadFromCloud() {
+            try {
+                const response = await fetch(WEB_APP_URL, {
+                    method: "POST",
+                    body: JSON.stringify({ action: "load" })
+                });
+                const cloudState = await response.json();
+                if (cloudState && cloudState.budgets) {
+                    state = cloudState;
+                    localStorage.setItem('moneyPlanData', JSON.stringify(state));
+                    renderAll();
+                    document.getElementById('sync-status').innerText = "✅ 已獲取雲端最新資料";
+                }
+            } catch (e) {
+                document.getElementById('sync-status').innerText = "⚠️ 無法讀取雲端，使用本地資料";
+            }
+        }
+
+        // --- 3. 核心功能邏輯 ---
+        function save() {
+            localStorage.setItem('moneyPlanData', JSON.stringify(state));
+            renderAll();
+            syncToCloud();
+        }
+
+        function showPage(pageId) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById('page-' + pageId).classList.add('active');
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            window.event.currentTarget.classList.add('active');
+            renderAll();
+        }
+
+        function autoSplit() {
+            const t = parseFloat(document.getElementById('exp-total').value || 0);
+            if(t > 0) {
+                document.getElementById('o-83').value = (t/2).toFixed(0);
+                document.getElementById('o-jy').value = (t/2).toFixed(0);
+            }
+        }
+
+        function quickPay(who) {
+            const t = parseFloat(document.getElementById('exp-total').value || 0);
+            document.getElementById('p-83').value = (who === '83' ? t : 0);
+            document.getElementById('p-jy').value = (who === 'jy' ? t : 0);
+        }
+
+        function renderAll() {
+            renderHome();
+            const cats = Object.keys(state.budgets).map(n => `<option value="${n}">${n}</option>`).join('');
+            document.getElementById('exp-cat').innerHTML = cats;
+            document.getElementById('inc-cat').innerHTML = cats;
+            renderManageList();
+        }
+
+        function renderHome() {
+            const d = document.getElementById('home-debt');
+            if (state.netDebt > 0) d.innerText = `⚠️ 捷媖 欠 83 $${Math.round(state.netDebt)}`;
+            else if (state.netDebt < 0) d.innerText = `✅ 83 欠 捷媖 $${Math.round(Math.abs(state.netDebt))}`;
+            else d.innerText = `✨ 目前雙方互不相欠`;
+
+            const bCont = document.getElementById('home-budgets');
+            bCont.innerHTML = '';
+            for (let n in state.budgets) {
+                const b = state.budgets[n];
+                const p = Math.max(0, (b.remain / b.total * 100).toFixed(0));
+                bCont.innerHTML += `<div class="budget-row">
+                    <div class="budget-label"><span>${n}</span><span>$${Math.round(b.remain)} / $${b.total}</span></div>
+                    <div class="progress-bg"><div class="progress-fill" style="width:${p}%; background:${p < 20 ? '#ea4335' : '#34a853'}"></div></div>
+                </div>`;
+            }
+
+            document.getElementById('home-logs').innerHTML = state.logs.map((l, idx) => `
+                <div class="log-item">
+                    <div><b>${l.txt}</b> <small style="color:#999">${l.date || ''}</small></div>
+                    <div class="log-actions">
+                        <span class="btn-sm" style="color:var(--primary)" onclick="editLog(${idx})">編輯</span>
+                        <span class="btn-sm" style="color:var(--danger)" onclick="deleteLog(${idx})">刪除</span>
+                    </div>
+                </div>`).join('');
+        }
+
+        function renderManageList() {
+            const m = document.getElementById('manage-list');
+            m.innerHTML = '<h2>現有預算列表</h2>';
+            for (let n in state.budgets) {
+                m.innerHTML += `<div class="card" style="display:flex; justify-content:space-between; align-items:center;">
+                    <span onclick="fillManage('${n}', ${state.budgets[n].total})"><b>${n}</b>: $${state.budgets[n].total}</span>
+                    <button onclick="deleteCat('${n}')" style="width:auto; padding:5px; background:var(--danger)">刪除</button>
+                </div>`;
+            }
+        }
+
+        function fillManage(n, a) { document.getElementById('m-name').value = n; document.getElementById('m-amt').value = a; }
+
+        function saveExpense() {
+            const item = document.getElementById('exp-item').value;
+            const total = parseFloat(document.getElementById('exp-total').value || 0);
+            const cat = document.getElementById('exp-cat').value;
+            const p83 = parseFloat(document.getElementById('p-83').value || 0);
+            const pjy = parseFloat(document.getElementById('p-jy').value || 0);
+            const o83 = parseFloat(document.getElementById('o-83').value || 0);
+            const ojy = parseFloat(document.getElementById('o-jy').value || 0);
+
+            if (!item || total <= 0) return alert("請填寫內容");
+            
+            const logEntry = {
+                txt: `💸 ${item} -$${total} (${cat})`,
+                type: 'exp',
+                amount: total,
+                category: cat,
+                debtChange: (ojy - pjy),
+                date: new Date().toLocaleDateString(),
+                details: { item, total, cat, p83, pjy, o83, ojy }
+            };
+            
+            state.budgets[cat].remain -= total;
+            state.netDebt += logEntry.debtChange;
+            state.logs.unshift(logEntry);
+            save();
+            showPage('home');
+        }
+
+        function saveIncome() {
+            const item = document.getElementById('inc-item').value;
+            const amt = parseFloat(document.getElementById('inc-amt').value || 0);
+            const cat = document.getElementById('inc-cat').value;
+            if (!item || amt <= 0) return alert("資訊不完整");
+
+            const logEntry = {
+                txt: `💰 ${item} +$${amt} (${cat})`,
+                type: 'inc',
+                amount: amt,
+                category: cat,
+                date: new Date().toLocaleDateString()
+            };
+
+            state.budgets[cat].total += amt;
+            state.budgets[cat].remain += amt;
+            state.logs.unshift(logEntry);
+            save();
+            showPage('home');
+        }
+
+        function editLog(idx) {
+            const l = state.logs[idx];
+            if (l.type !== 'exp') return alert("目前僅支援支出編輯");
+            document.getElementById('exp-item').value = l.details.item;
+            document.getElementById('exp-total').value = l.details.total;
+            document.getElementById('exp-cat').value = l.details.cat;
+            document.getElementById('p-83').value = l.details.p83;
+            document.getElementById('p-jy').value = l.details.pjy;
+            document.getElementById('o-83').value = l.details.o83;
+            document.getElementById('o-jy').value = l.details.ojy;
+            deleteLog(idx, true);
+            showPage('expense');
+        }
+
+        function deleteLog(idx, silent = false) {
+            if (!silent && !confirm("確定刪除？")) return;
+            const l = state.logs[idx];
+            if (l.type === 'exp') {
+                state.budgets[l.category].remain += l.amount;
+                state.netDebt -= l.debtChange;
+            } else {
+                state.budgets[l.category].total -= l.amount;
+                state.budgets[l.category].remain -= l.amount;
+            }
+            state.logs.splice(idx, 1);
+            save();
+        }
+
+        function saveCategory() {
+            const n = document.getElementById('m-name').value;
+            const a = parseFloat(document.getElementById('m-amt').value || 0);
+            if (n && a > 0) {
+                if (state.budgets[n]) {
+                    const diff = a - state.budgets[n].total;
+                    state.budgets[n].total = a;
+                    state.budgets[n].remain += diff;
+                } else { state.budgets[n] = { total: a, remain: a }; }
+                save();
+            }
+        }
+
+        function deleteCat(n) { if (confirm(`確定刪除 ${n}？`)) { delete state.budgets[n]; save(); } }
+
+        function resetData() {
+            if (confirm("⚠️ 確定重置？")) {
+                localStorage.removeItem('moneyPlanData');
+                location.reload();
+            }
+        }
+
+        // 啟動載入
+        renderAll();
+        loadFromCloud();
+    </script>
+</body>
+</html>
